@@ -9,6 +9,8 @@ import numpy as np
 import torch.nn as nn
 from tqdm import tqdm
 import torch
+import logging
+import psutil
 
 from . import utils
 from . import commons
@@ -16,6 +18,9 @@ from .models import SynthesizerTrn
 from .split_utils import split_sentence
 from .mel_processing import spectrogram_torch, spectrogram_torch_conv
 from .download_utils import load_or_download_config, load_or_download_model
+
+# 로거 가져오기
+logger = logging.getLogger('pdf2mp3')
 
 class TTS(nn.Module):
     def __init__(self, 
@@ -82,7 +87,11 @@ class TTS(nn.Module):
 
     def tts_to_file(self, text, speaker_id, output_path=None, sdp_ratio=0.2, noise_scale=0.6, noise_scale_w=0.8, speed=1.0, pbar=None, format=None, position=None, quiet=False,):
         language = self.language
+        logger.debug(f"tts_to_file 시작: 텍스트 길이 {len(text)} 문자")
+        
         texts = self.split_sentences_into_pieces(text, language, quiet)
+        logger.debug(f"문장 분할 완료: {len(texts)}개 문장")
+        
         audio_list = []
         if pbar:
             tx = pbar(texts)
@@ -93,11 +102,26 @@ class TTS(nn.Module):
                 tx = texts
             else:
                 tx = tqdm(texts)
+        
+        sentence_count = 0
         for t in tx:
+            sentence_count += 1
+            if sentence_count % 5 == 1:  # 5문장마다 메모리 로그
+                try:
+                    process = psutil.Process(os.getpid())
+                    mem_mb = process.memory_info().rss / 1024 / 1024
+                    logger.debug(f"문장 {sentence_count}/{len(texts)} 처리 전 메모리: {mem_mb:.1f}MB")
+                except:
+                    pass
+            
             if language in ['EN', 'ZH_MIX_EN']:
                 t = re.sub(r'([a-z])([A-Z])', r'\1 \2', t)
             device = self.device
+            
+            logger.debug(f"문장 {sentence_count} BERT 로드 중...")
             bert, ja_bert, phones, tones, lang_ids = utils.get_text_for_tts_infer(t, language, self.hps, device, self.symbol_to_id)
+            logger.debug(f"문장 {sentence_count} 추론 시작")
+            
             with torch.no_grad():
                 x_tst = phones.to(device).unsqueeze(0)
                 tones = tones.to(device).unsqueeze(0)
@@ -124,24 +148,31 @@ class TTS(nn.Module):
                 # 메모리 정리 강화
                 if torch.cuda.is_available():
                     torch.cuda.empty_cache()
+            
+            logger.debug(f"문장 {sentence_count} 추론 완료")
             audio_list.append(audio)
             del audio  # 명시적 삭제
         
+        logger.debug(f"모든 문장 처리 완료, 오디오 결합 시작")
         # 최종 메모리 정리
         if torch.cuda.is_available():
             torch.cuda.empty_cache()
         
         audio = self.audio_numpy_concat(audio_list, sr=self.hps.data.sampling_rate, speed=speed)
+        logger.debug(f"오디오 결합 완료: {len(audio)} 샘플")
         
         # audio_list 메모리 해제
         del audio_list
         
         if output_path is None:
+            logger.debug("메모리 반환 모드")
             return audio
         else:
+            logger.debug(f"파일 저장 시작: {output_path}")
             if format:
                 soundfile.write(output_path, audio, self.hps.data.sampling_rate, format=format)
             else:
                 soundfile.write(output_path, audio, self.hps.data.sampling_rate)
+            logger.info(f"파일 저장 완료: {output_path}")
             # 파일 저장 후 메모리 해제
             del audio

@@ -2,21 +2,93 @@ import fitz  # PyMuPDF
 import re, sys, os
 import gc
 import torch
+import logging
+import datetime
+import psutil  # 시스템 리소스 모니터링
+import traceback
 #from gtts import gTTS
 from melo.api import TTS
 
 # 전역 TTS 모델 인스턴스 (싱글톤 패턴)
 _tts_model = None
 
+# 로깅 설정
+def setup_logging(log_file='pdf2mp3.log'):
+    """
+    상세한 로깅 설정
+    파일과 콘솔에 동시 출력
+    """
+    # 로거 생성
+    logger = logging.getLogger('pdf2mp3')
+    logger.setLevel(logging.DEBUG)
+    
+    # 기존 핸들러 제거 (중복 방지)
+    logger.handlers.clear()
+    
+    # 파일 핸들러 (상세 로그)
+    file_handler = logging.FileHandler(log_file, mode='a', encoding='utf-8')
+    file_handler.setLevel(logging.DEBUG)
+    file_formatter = logging.Formatter(
+        '%(asctime)s [%(levelname)s] %(message)s',
+        datefmt='%Y-%m-%d %H:%M:%S'
+    )
+    file_handler.setFormatter(file_formatter)
+    
+    # 콘솔 핸들러 (간단한 로그)
+    console_handler = logging.StreamHandler()
+    console_handler.setLevel(logging.INFO)
+    console_formatter = logging.Formatter('%(message)s')
+    console_handler.setFormatter(console_formatter)
+    
+    logger.addHandler(file_handler)
+    logger.addHandler(console_handler)
+    
+    return logger
+
+# 로거 초기화
+logger = setup_logging()
+
+def log_memory_status(location=""):
+    """
+    현재 메모리 상태를 로그에 기록
+    """
+    try:
+        process = psutil.Process(os.getpid())
+        mem_info = process.memory_info()
+        mem_percent = process.memory_percent()
+        
+        # 시스템 전체 메모리
+        virtual_mem = psutil.virtual_memory()
+        
+        log_msg = f"[MEMORY {location}] "
+        log_msg += f"프로세스: {mem_info.rss / 1024 / 1024:.1f}MB ({mem_percent:.1f}%), "
+        log_msg += f"시스템: {virtual_mem.used / 1024 / 1024:.1f}MB / {virtual_mem.total / 1024 / 1024:.1f}MB "
+        log_msg += f"({virtual_mem.percent:.1f}% 사용)"
+        
+        logger.debug(log_msg)
+        
+        # 메모리 사용률이 90% 이상이면 경고
+        if virtual_mem.percent > 90:
+            logger.warning(f"⚠️  시스템 메모리 부족! {virtual_mem.percent:.1f}% 사용 중")
+            
+    except Exception as e:
+        logger.error(f"메모리 상태 확인 오류: {e}")
+
 def force_memory_cleanup():
     """
     강제 메모리 정리
     """
+    logger.debug("[CLEANUP] 메모리 정리 시작")
+    log_memory_status("BEFORE_CLEANUP")
+    
     import gc
     gc.collect()
     if torch.cuda.is_available():
         torch.cuda.empty_cache()
         torch.cuda.synchronize()
+    
+    log_memory_status("AFTER_CLEANUP")
+    logger.debug("[CLEANUP] 메모리 정리 완료")
 
 def get_tts_model(lang='KR', device='cpu'):
     """
@@ -26,15 +98,23 @@ def get_tts_model(lang='KR', device='cpu'):
     global _tts_model
     if _tts_model is None:
         # 모델 로딩 전 메모리 정리
+        logger.info("TTS 모델 로딩 전 메모리 정리")
         force_memory_cleanup()
         
         print(f"TTS 모델 로딩 중... (언어: {lang}, 디바이스: {device})")
         print("⚠️  메모리가 부족한 경우 시간이 걸릴 수 있습니다...")
+        logger.info(f"TTS 모델 로딩 중 (언어: {lang}, 디바이스: {device})")
+        log_memory_status("BEFORE_TTS_INIT")
         _tts_model = TTS(language=lang, device=device)
+        logger.info("TTS 모델 인스턴스 생성 완료")
+        log_memory_status("AFTER_TTS_INIT")
         print("TTS 모델 로딩 완료!")
         
         # 로딩 후에도 메모리 정리
+        logger.info("TTS 모델 로딩 후 메모리 정리")
         force_memory_cleanup()
+    else:
+        logger.debug("기존 TTS 모델 재사용")
     return _tts_model
 
 def release_tts_model():
@@ -43,11 +123,17 @@ def release_tts_model():
     """
     global _tts_model
     if _tts_model is not None:
+        logger.info("TTS 모델 메모리 해제 중")
+        log_memory_status("BEFORE_MODEL_DELETE")
         del _tts_model
         _tts_model = None
         gc.collect()
         torch.cuda.empty_cache()  # GPU 사용 시를 위해
+        logger.info("TTS 모델 메모리 해제 완료")
+        log_memory_status("AFTER_MODEL_DELETE")
         print("TTS 모델 메모리 해제 완료")
+    else:
+        logger.debug("해제할 TTS 모델 없음")
 
 def pdf_to_text(pdf_path):
     # PDF 파일에서 텍스트 추출
@@ -87,84 +173,144 @@ def pdf_to_mp3(pdf_path, mp3_path, start_num=0, lang='KR', device='cpu'):
     2. 파일을 하나씩 읽어서 MP3 생성
     3. 메모리에 모든 청크를 보관하지 않음
     """
+    logger.info("="*60)
+    logger.info(f"PDF to MP3 변환 시작: {pdf_path}")
+    logger.info(f"출력: {mp3_path}, 시작: {start_num}, 언어: {lang}, 디바이스: {device}")
+    logger.info("="*60)
+    log_memory_status("START")
+    
     # PDF에서 텍스트 추출
     print("\n[1단계] PDF에서 텍스트 추출 중...")
+    logger.info("[1단계] PDF 텍스트 추출 시작")
+    log_memory_status("BEFORE_PDF_EXTRACT")
     text = pdf_to_text(pdf_path)
+    log_memory_status("AFTER_PDF_EXTRACT")
     if not text:
+        logger.error("PDF 파일에서 텍스트를 추출하지 못했습니다.")
         print("PDF 파일에서 텍스트를 추출하지 못했습니다.")
         return
     
+    logger.info(f"추출된 텍스트 길이: {len(text)} 문자")
+    
     # 텍스트 전처리 및 분할
     print("[2단계] 텍스트 전처리 및 분할 중...")
+    logger.info("[2단계] 텍스트 전처리 시작")
+    log_memory_status("BEFORE_TEXT_PROCESS")
     text = switch_txt(text)
+    logger.info("텍스트 정리 완료")
     sp_txt = split_text(text)
+    log_memory_status("AFTER_TEXT_SPLIT")
     
     total_chunks = len(sp_txt)
+    logger.info(f"총 {total_chunks}개의 청크로 분할")
     print(f"✓ 총 {total_chunks}개의 청크로 분할되었습니다.")
     
     # 단계 2: 모든 청크를 파일로 저장 (메모리 해제를 위해)
     print(f"\n[3단계] 모든 청크를 파일로 저장 중...")
+    logger.info("[3단계] 청크 파일 저장 시작")
+    log_memory_status("BEFORE_SAVE_CHUNKS")
     for i, chunk_text in enumerate(sp_txt):
         chunk_filename = f"sptxt_{i}.txt"
         save_text_to_file(chunk_text, chunk_filename, silent=True)
+        if i % 10 == 0:  # 10개마다 로그
+            logger.debug(f"청크 {i}/{total_chunks} 저장 완료")
+    logger.info(f"{total_chunks}개의 텍스트 파일 저장 완료")
     print(f"✓ {total_chunks}개의 텍스트 파일 저장 완료")
     
     # 메모리에서 청크 리스트 제거
+    logger.info("청크 리스트를 메모리에서 해제")
+    log_memory_status("BEFORE_DELETE_CHUNKS")
     del sp_txt
     del text
     force_memory_cleanup()
+    logger.info("텍스트 데이터 메모리 해제 완료")
     print("✓ 메모리에서 텍스트 데이터 해제 완료")
     
     # 단계 3: TTS 모델 로딩
     print(f"\n[4단계] TTS 모델 로딩 중...")
+    logger.info("[4단계] TTS 모델 로딩 시작")
+    log_memory_status("BEFORE_TTS_LOAD")
     try:
         model = get_tts_model(lang=lang, device=device)
+        logger.info("TTS 모델 로딩 완료")
+        log_memory_status("AFTER_TTS_LOAD")
         speaker_ids = model.hps.data.spk2id
         speed = 1.25
         
         # 단계 4: 파일을 하나씩 읽어서 MP3 생성
         print(f"\n[5단계] MP3 파일 생성 시작 (시작 번호: {start_num})")
+        logger.info(f"[5단계] MP3 생성 시작 (총 {total_chunks}개, 시작: {start_num})")
         print("=" * 60)
         
         for i in range(start_num, total_chunks):
+            logger.info(f"\n{'='*60}")
+            logger.info(f"청크 {i+1}/{total_chunks} 처리 시작")
+            log_memory_status(f"BEFORE_CHUNK_{i}")
             print(f"\n▶ 처리 중: [{i+1}/{total_chunks}] 청크")
             
             # 파일에서 텍스트 읽기
             chunk_filename = f"sptxt_{i}.txt"
             try:
+                logger.debug(f"파일 읽기: {chunk_filename}")
                 with open(chunk_filename, 'r', encoding='utf-8') as f:
                     chunk_text = f.read()
+                logger.debug(f"청크 텍스트 길이: {len(chunk_text)} 문자")
             except FileNotFoundError:
+                logger.error(f"파일을 찾을 수 없습니다: {chunk_filename}")
                 print(f"⚠️  파일을 찾을 수 없습니다: {chunk_filename}")
                 continue
             
             # MP3 파일명 생성
             mp3_file_name = f"{mp3_path}_{i:02d}.mp3"
+            logger.info(f"MP3 생성 시작: {mp3_file_name}")
             
             # 음성 변환
             print(f"  - 음성 변환 중...")
-            text_to_mp3_optimized(model, speaker_ids, chunk_text, mp3_file_name, speed, lang)
+            log_memory_status(f"BEFORE_TTS_CHUNK_{i}")
+            try:
+                text_to_mp3_optimized(model, speaker_ids, chunk_text, mp3_file_name, speed, lang)
+                logger.info(f"MP3 생성 완료: {mp3_file_name}")
+                log_memory_status(f"AFTER_TTS_CHUNK_{i}")
+            except Exception as tts_error:
+                logger.error(f"TTS 변환 오류 (청크 {i}): {tts_error}")
+                logger.error(traceback.format_exc())
+                raise
             
             # 처리 완료
             print(f"  ✓ 완료: {mp3_file_name}")
             
             # 청크 텍스트 메모리 해제
+            logger.debug("청크 텍스트 메모리 해제")
             del chunk_text
             
             # 각 청크 처리 후 메모리 정리
+            logger.debug("청크 처리 후 메모리 정리")
             force_memory_cleanup()
+            logger.info(f"청크 {i+1} 완료")
+            log_memory_status(f"AFTER_CLEANUP_CHUNK_{i}")
             
         print("\n" + "=" * 60)
         print("✓ 모든 MP3 파일 생성 완료!")
+        logger.info("="*60)
+        logger.info("모든 MP3 파일 생성 완료")
+        log_memory_status("ALL_DONE")
             
     except Exception as e:
+        logger.error(f"\n❌ 치명적 오류 발생: {e}")
+        logger.error(traceback.format_exc())
+        log_memory_status("ERROR_STATE")
         print(f"\n❌ 오류 발생: {e}")
         import traceback
         traceback.print_exc()
     finally:
         # 모든 작업 완료 후 모델 해제
+        logger.info("TTS 모델 해제 시작")
+        log_memory_status("BEFORE_RELEASE")
         release_tts_model()
+        logger.info("TTS 모델 해제 완료")
+        log_memory_status("AFTER_RELEASE")
         print("\n[최종] 모든 작업이 완료되었습니다.")
+        logger.info("[최종] 프로그램 종료")
 
 def text_to_mp3_optimized(model, speaker_ids, text, mp3_path, speed=1.25, lang='KR'):
     """
@@ -180,8 +326,14 @@ def text_to_mp3_optimized(model, speaker_ids, text, mp3_path, speed=1.25, lang='
         lang: 언어 코드
     """
     try:
+        logger.debug(f"TTS 변환 시작: {len(text)} 문자 -> {mp3_path}")
+        log_memory_status("BEFORE_TTS_CALL")
         model.tts_to_file(text, speaker_ids[lang], mp3_path, speed=speed, quiet=True)
+        log_memory_status("AFTER_TTS_CALL")
+        logger.debug(f"TTS 변환 완료: {mp3_path}")
     except Exception as e:
+        logger.error(f"음성 변환 중 오류 발생: {e}")
+        logger.error(traceback.format_exc())
         print(f"음성 변환 중 오류 발생: {e}")
         raise
 
