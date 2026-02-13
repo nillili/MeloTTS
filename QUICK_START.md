@@ -1,8 +1,10 @@
 # 🚀 빠른 시작 가이드
 
-## ✅ 최종 수정 완료! (v2.2.1)
+## ✅ 최종 수정 완료! (v2.2.2)
 
-**문제 해결**: `run_pdf2mp3.sh` 스크립트가 이제 Conda 환경의 Python을 정확하게 사용합니다!
+**문제 해결**: `run_pdf2mp3.sh` 스크립트가 이제 Conda 환경의 Python을 **자동으로 정확하게 감지**합니다!
+
+**개선**: `which python` 명령으로 현재 활성화된 Python을 직접 확인하여 사용합니다.
 
 ---
 
@@ -25,6 +27,48 @@ conda activate melo
 
 ```bash
 ./run_pdf2mp3.sh 열세번째1.pdf
+```
+
+---
+
+## 🔍 Python 자동 감지 확인
+
+스크립트 실행 시 다음과 같이 Python 정보가 표시됩니다:
+
+```bash
+$ conda activate melo
+$ ./run_pdf2mp3.sh 열세번째1.pdf
+
+✓ Conda Python 감지: /home/hong/miniconda3/envs/melo/bin/python
+============================================================
+PDF2MP3 메모리 최적화 모드로 실행
+============================================================
+환경 변수 설정 완료:
+  - PyTorch 메모리 최적화: ON
+  - 병렬 처리: OFF (메모리 절약)
+  - 스레드 수: 1 (메모리 절약)
+  - Python 명령: python  ← 올바른 Python 사용!
+  - Conda 환경: melo
+============================================================
+```
+
+---
+
+## 🧪 작동 확인 방법
+
+스크립트가 올바른 Python을 사용하는지 확인:
+
+```bash
+# 1. Conda 환경 활성화
+conda activate melo
+
+# 2. 현재 Python 경로 확인
+which python
+# 출력 예: /home/hong/miniconda3/envs/melo/bin/python
+
+# 3. 스크립트 실행 시 같은 Python 사용 확인
+./run_pdf2mp3.sh 열세번째1.pdf
+# "✓ Conda Python 감지: ..." 메시지에서 같은 경로 표시되는지 확인
 ```
 
 ---
@@ -138,9 +182,27 @@ sptxt_40.txt
 
 ---
 
-## ⚠️ 여전히 "죽었음" 오류 발생 시
+## ⚠️ 여전히 문제가 발생하면?
 
-### 1. Swap 메모리 추가 (가장 효과적)
+### 문제 1: 스크립트가 잘못된 Python 사용
+
+**증상**: `./run_pdf2mp3.sh` 실행 시 모듈을 찾을 수 없다는 오류
+
+**해결**:
+```bash
+# 방법 A: 직접 python 명령 사용 (가장 확실)
+conda activate melo
+python pdf2mp3.py 열세번째1.pdf
+
+# 방법 B: 스크립트 디버그
+conda activate melo
+which python  # 올바른 경로 확인
+./run_pdf2mp3.sh 열세번째1.pdf  # Python 경로가 일치하는지 확인
+```
+
+### 문제 2: "죽었음(Killed)" 오류
+
+**해결책 1: Swap 메모리 추가 (가장 효과적)**
 
 ```bash
 sudo fallocate -l 512M /swapfile
@@ -150,11 +212,19 @@ sudo swapon /swapfile
 free -h  # 확인
 ```
 
-### 2. 청크 크기 축소
+**해결책 2: 청크 크기 축소**
 
 `pdf2mp3.py` 파일 수정:
 ```python
 def split_text(text, max_length=1500, ...):  # 2000 → 1500
+```
+
+### 문제 3: 환경 감지가 안 됨
+
+**해결**: 직접 Python 지정
+```bash
+conda activate melo
+python pdf2mp3.py 열세번째1.pdf  # 이 방법이 가장 확실!
 ```
 
 ---
