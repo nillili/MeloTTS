@@ -50,9 +50,18 @@ def force_memory_cleanup():
 
 ## 🎯 지금 바로 사용하는 방법
 
+### ⚠️ 사전 준비: Conda 환경 활성화 (필수!)
+
+```bash
+conda activate melo
+```
+
 ### 방법 1: 메모리 최적화 스크립트 (★★★ 강력 권장)
 
 ```bash
+# Conda 환경 활성화 확인
+conda activate melo
+
 # 스크립트에 실행 권한 부여 (최초 1회만)
 chmod +x run_pdf2mp3.sh
 
@@ -72,10 +81,16 @@ chmod +x run_pdf2mp3.sh
 ### 방법 2: 기존 방식 (직접 실행)
 
 ```bash
+# Conda 환경 활성화 확인
+conda activate melo
+
+# 실행
 python pdf2mp3.py 열세번째1.pdf
 ```
 
 > ⚠️ 방법 1이 메모리를 더 절약하므로 **방법 1 권장**!
+
+> 🔴 **중요**: 반드시 `conda activate melo` 명령으로 환경을 먼저 활성화해야 합니다!
 
 ---
 

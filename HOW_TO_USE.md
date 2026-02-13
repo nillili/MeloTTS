@@ -30,19 +30,31 @@ cd ~/work/MeloTTS
 git pull origin main
 ```
 
-### 2. 실행
+### 2. Conda 환경 활성화 (필수!)
+
+```bash
+conda activate melo
+```
+
+### 3. 실행
 
 #### 방법 A: 메모리 최적화 스크립트 (권장)
 
 ```bash
+# Conda 환경 활성화 후 실행
+conda activate melo
 ./run_pdf2mp3.sh 열세번째1.pdf
 ```
 
 #### 방법 B: 직접 실행
 
 ```bash
+# Conda 환경 활성화 후 실행
+conda activate melo
 python pdf2mp3.py 열세번째1.pdf
 ```
+
+**⚠️ 중요**: 반드시 `conda activate melo` 명령으로 환경을 먼저 활성화해야 합니다!
 
 ---
 
