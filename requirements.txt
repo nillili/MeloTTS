@@ -1,0 +1,17 @@
+# PDF 처리
+PyMuPDF>=1.23.0
+
+# TTS (Text-to-Speech)
+torch>=2.0.0
+torchaudio>=2.0.0
+librosa>=0.10.0
+soundfile>=0.12.0
+numpy>=1.24.0
+
+# 진행률 표시
+tqdm>=4.65.0
+
+# 기타
+Cython>=0.29.0
+pydantic>=2.0.0
+cached-path>=1.3.0

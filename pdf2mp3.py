@@ -1,8 +1,36 @@
 import fitz  # PyMuPDF
 import re, sys, os
 import gc
+import torch
 #from gtts import gTTS
 from melo.api import TTS
+
+# 전역 TTS 모델 인스턴스 (싱글톤 패턴)
+_tts_model = None
+
+def get_tts_model(lang='KR', device='cpu'):
+    """
+    TTS 모델을 싱글톤 패턴으로 관리
+    한 번만 로딩하고 재사용하여 메모리 절약
+    """
+    global _tts_model
+    if _tts_model is None:
+        print(f"TTS 모델 로딩 중... (언어: {lang}, 디바이스: {device})")
+        _tts_model = TTS(language=lang, device=device)
+        print("TTS 모델 로딩 완료!")
+    return _tts_model
+
+def release_tts_model():
+    """
+    TTS 모델을 메모리에서 완전히 해제
+    """
+    global _tts_model
+    if _tts_model is not None:
+        del _tts_model
+        _tts_model = None
+        gc.collect()
+        torch.cuda.empty_cache()  # GPU 사용 시를 위해
+        print("TTS 모델 메모리 해제 완료")
 
 def pdf_to_text(pdf_path):
     # PDF 파일에서 텍스트 추출
@@ -32,36 +60,86 @@ def save_text_to_file(text_content, filename="abc.txt"):
         print(f"파일을 저장하는 중 오류가 발생했습니다: {e}")
 
 
-def pdf_to_mp3(pdf_path, mp3_path, start_num=0, lang='ko'):
-    # PDF에서 텍스트를 추출한 후 MP3로 저장
+def pdf_to_mp3(pdf_path, mp3_path, start_num=0, lang='KR', device='cpu'):
+    """
+    PDF에서 텍스트를 추출한 후 MP3로 저장
+    메모리 효율성을 위해 모델을 한 번만 로딩하고 재사용
+    """
+    # PDF에서 텍스트 추출
     text = pdf_to_text(pdf_path)
-    if text:
-        text = switch_txt(text)
-        sp_txt = split_text(text)
-
-        for i, c_text in enumerate(sp_txt[start_num:], start=start_num):
-            save_text_to_file(c_text, f"sptxt_{i}.txt")
-
-            # i를 2자리로 0채움: 0->00, 1->01, 9->09, 10->10, 11->11
-            mp3_file_name = f"{mp3_path}_{i:02d}.mp3"
-            # 또는: mp3_file_name = f"{mp3_path}_{str(i).zfill(2)}.mp3"
-
-            text_to_mp3(c_text, mp3_file_name, lang)
-            print(f"MP3 파일이 생성되었습니다: {mp3_file_name}")
-            gc.collect()
-    else:
+    if not text:
         print("PDF 파일에서 텍스트를 추출하지 못했습니다.")
+        return
+    
+    # 텍스트 전처리 및 분할
+    text = switch_txt(text)
+    sp_txt = split_text(text)
+    
+    print(f"총 {len(sp_txt)}개의 청크로 분할되었습니다.")
+    print(f"시작 번호: {start_num}")
+    
+    try:
+        # TTS 모델을 한 번만 로딩 (메모리 최적화)
+        model = get_tts_model(lang=lang, device=device)
+        speaker_ids = model.hps.data.spk2id
+        speed = 1.25
+        
+        for i, c_text in enumerate(sp_txt[start_num:], start=start_num):
+            print(f"\n처리 중: [{i+1}/{len(sp_txt)}] 청크")
+            
+            # 분할된 텍스트 저장
+            save_text_to_file(c_text, f"sptxt_{i}.txt")
+            
+            # 파일명 생성 (2자리 0채움)
+            mp3_file_name = f"{mp3_path}_{i:02d}.mp3"
+            
+            # 음성 변환 (모델 재사용)
+            text_to_mp3_optimized(model, speaker_ids, c_text, mp3_file_name, speed, lang)
+            
+            print(f"✓ MP3 파일 생성 완료: {mp3_file_name}")
+            
+            # 메모리 정리
+            gc.collect()
+            
+    except Exception as e:
+        print(f"❌ 오류 발생: {e}")
+        import traceback
+        traceback.print_exc()
+    finally:
+        # 모든 작업 완료 후 모델 해제
+        release_tts_model()
+        print("\n모든 작업이 완료되었습니다.")
+
+def text_to_mp3_optimized(model, speaker_ids, text, mp3_path, speed=1.25, lang='KR'):
+    """
+    최적화된 텍스트-음성 변환 함수
+    이미 로딩된 모델을 재사용하여 메모리 절약
+    
+    Args:
+        model: 이미 로딩된 TTS 모델 인스턴스
+        speaker_ids: 스피커 ID 딕셔너리
+        text: 변환할 텍스트
+        mp3_path: 저장할 MP3 파일 경로
+        speed: 재생 속도
+        lang: 언어 코드
+    """
+    try:
+        model.tts_to_file(text, speaker_ids[lang], mp3_path, speed=speed, quiet=True)
+    except Exception as e:
+        print(f"음성 변환 중 오류 발생: {e}")
+        raise
 
 def text_to_mp3(text, mp3_path, lang):
+    """
+    기존 호환성을 위한 레거시 함수
+    (사용 권장하지 않음 - text_to_mp3_optimized 사용 권장)
+    """
     speed = 1.25
-    #device = 'cpu' # or cuda:0
-    device = 'cpu' # or cuda:0
-
-    # text = "안녕하세요! 오늘은 날씨가 정말 좋네요."
+    device = 'cpu'
+    
     model = TTS(language='KR', device=device)
     speaker_ids = model.hps.data.spk2id
-
-    # output_path = 'kr.wav'
+    
     model.tts_to_file(text, speaker_ids['KR'], mp3_path, speed=speed)
 
 def split_text(text, max_length=3000, split_pattern=r'니다\.|습니다\.|었다\.|한다\.|였다\.'):
@@ -213,9 +291,23 @@ if len(sys.argv) > 1:
         start_num = int(sys.argv[2])
     else: 
         start_num = 0
+    
+    # 디바이스 설정 (선택적 파라미터)
+    device = 'cpu'
+    if len(sys.argv) > 3:
+        device = sys.argv[3]  # 예: 'cuda' 또는 'cuda:0'
 
     filename = os.path.basename(filepath)
     name, _ = os.path.splitext(filename) 
 
-    pdf_to_mp3(filepath, name, start_num)
+    print(f"=" * 60)
+    print(f"PDF to MP3 변환 시작")
+    print(f"=" * 60)
+    print(f"입력 파일: {filepath}")
+    print(f"출력 이름: {name}")
+    print(f"시작 번호: {start_num}")
+    print(f"디바이스: {device}")
+    print(f"=" * 60)
+    
+    pdf_to_mp3(filepath, name, start_num, lang='KR', device=device)
 
