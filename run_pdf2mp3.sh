@@ -57,8 +57,8 @@ export TOKENIZERS_PARALLELISM=false
 export OMP_NUM_THREADS=1
 export MKL_NUM_THREADS=1
 
-# Python 메모리 최적화
-export PYTHONOPTIMIZE=2
+# Python 메모리 최적화 (PYTHONOPTIMIZE 제거 - torchaudio 충돌 방지)
+# export PYTHONOPTIMIZE=2  # 주석 처리: torchaudio docstring 오류 발생
 export PYTHONDONTWRITEBYTECODE=1
 
 # HuggingFace 캐시 경고 억제
