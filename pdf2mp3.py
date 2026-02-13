@@ -8,6 +8,16 @@ from melo.api import TTS
 # 전역 TTS 모델 인스턴스 (싱글톤 패턴)
 _tts_model = None
 
+def force_memory_cleanup():
+    """
+    강제 메모리 정리
+    """
+    import gc
+    gc.collect()
+    if torch.cuda.is_available():
+        torch.cuda.empty_cache()
+        torch.cuda.synchronize()
+
 def get_tts_model(lang='KR', device='cpu'):
     """
     TTS 모델을 싱글톤 패턴으로 관리
@@ -15,9 +25,16 @@ def get_tts_model(lang='KR', device='cpu'):
     """
     global _tts_model
     if _tts_model is None:
+        # 모델 로딩 전 메모리 정리
+        force_memory_cleanup()
+        
         print(f"TTS 모델 로딩 중... (언어: {lang}, 디바이스: {device})")
+        print("⚠️  메모리가 부족한 경우 시간이 걸릴 수 있습니다...")
         _tts_model = TTS(language=lang, device=device)
         print("TTS 모델 로딩 완료!")
+        
+        # 로딩 후에도 메모리 정리
+        force_memory_cleanup()
     return _tts_model
 
 def release_tts_model():
@@ -98,8 +115,8 @@ def pdf_to_mp3(pdf_path, mp3_path, start_num=0, lang='KR', device='cpu'):
             
             print(f"✓ MP3 파일 생성 완료: {mp3_file_name}")
             
-            # 메모리 정리
-            gc.collect()
+            # 각 청크 처리 후 메모리 정리
+            force_memory_cleanup()
             
     except Exception as e:
         print(f"❌ 오류 발생: {e}")
@@ -142,7 +159,7 @@ def text_to_mp3(text, mp3_path, lang):
     
     model.tts_to_file(text, speaker_ids['KR'], mp3_path, speed=speed)
 
-def split_text(text, max_length=3000, split_pattern=r'니다\.|습니다\.|었다\.|한다\.|였다\.'):
+def split_text(text, max_length=2000, split_pattern=r'니다\.|습니다\.|었다\.|한다\.|였다\.'):
     """
     긴 텍스트를 지정된 최대 길이 이내에서 문장 끝을 기준으로 분리합니다.
 
