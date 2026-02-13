@@ -58,13 +58,14 @@ def pdf_to_text(pdf_path):
             text += page.get_text()
     return text
 
-def save_text_to_file(text_content, filename="abc.txt"):
+def save_text_to_file(text_content, filename="abc.txt", silent=False):
     """
     주어진 텍스트 내용을 지정된 파일로 저장합니다.
 
     Args:
         text_content (str): 파일에 저장할 텍스트 내용.
         filename (str, optional): 텍스트를 저장할 파일 이름. 기본값은 "abc.txt"입니다.
+        silent (bool, optional): True면 성공 메시지를 출력하지 않음. 기본값은 False입니다.
     """
     try:
         # 'w' 모드로 파일을 엽니다.
@@ -72,7 +73,8 @@ def save_text_to_file(text_content, filename="abc.txt"):
         # 파일이 존재하지 않으면 새로 생성합니다.
         with open(filename, 'w', encoding='utf-8') as f:
             f.write(text_content)
-        print(f"'{filename}' 파일에 텍스트가 성공적으로 저장되었습니다.")
+        if not silent:
+            print(f"'{filename}' 파일에 텍스트가 성공적으로 저장되었습니다.")
     except IOError as e:
         print(f"파일을 저장하는 중 오류가 발생했습니다: {e}")
 
@@ -80,52 +82,89 @@ def save_text_to_file(text_content, filename="abc.txt"):
 def pdf_to_mp3(pdf_path, mp3_path, start_num=0, lang='KR', device='cpu'):
     """
     PDF에서 텍스트를 추출한 후 MP3로 저장
-    메모리 효율성을 위해 모델을 한 번만 로딩하고 재사용
+    메모리 효율성을 위해:
+    1. 청크를 먼저 모두 파일로 저장
+    2. 파일을 하나씩 읽어서 MP3 생성
+    3. 메모리에 모든 청크를 보관하지 않음
     """
     # PDF에서 텍스트 추출
+    print("\n[1단계] PDF에서 텍스트 추출 중...")
     text = pdf_to_text(pdf_path)
     if not text:
         print("PDF 파일에서 텍스트를 추출하지 못했습니다.")
         return
     
     # 텍스트 전처리 및 분할
+    print("[2단계] 텍스트 전처리 및 분할 중...")
     text = switch_txt(text)
     sp_txt = split_text(text)
     
-    print(f"총 {len(sp_txt)}개의 청크로 분할되었습니다.")
-    print(f"시작 번호: {start_num}")
+    total_chunks = len(sp_txt)
+    print(f"✓ 총 {total_chunks}개의 청크로 분할되었습니다.")
     
+    # 단계 2: 모든 청크를 파일로 저장 (메모리 해제를 위해)
+    print(f"\n[3단계] 모든 청크를 파일로 저장 중...")
+    for i, chunk_text in enumerate(sp_txt):
+        chunk_filename = f"sptxt_{i}.txt"
+        save_text_to_file(chunk_text, chunk_filename, silent=True)
+    print(f"✓ {total_chunks}개의 텍스트 파일 저장 완료")
+    
+    # 메모리에서 청크 리스트 제거
+    del sp_txt
+    del text
+    force_memory_cleanup()
+    print("✓ 메모리에서 텍스트 데이터 해제 완료")
+    
+    # 단계 3: TTS 모델 로딩
+    print(f"\n[4단계] TTS 모델 로딩 중...")
     try:
-        # TTS 모델을 한 번만 로딩 (메모리 최적화)
         model = get_tts_model(lang=lang, device=device)
         speaker_ids = model.hps.data.spk2id
         speed = 1.25
         
-        for i, c_text in enumerate(sp_txt[start_num:], start=start_num):
-            print(f"\n처리 중: [{i+1}/{len(sp_txt)}] 청크")
+        # 단계 4: 파일을 하나씩 읽어서 MP3 생성
+        print(f"\n[5단계] MP3 파일 생성 시작 (시작 번호: {start_num})")
+        print("=" * 60)
+        
+        for i in range(start_num, total_chunks):
+            print(f"\n▶ 처리 중: [{i+1}/{total_chunks}] 청크")
             
-            # 분할된 텍스트 저장
-            save_text_to_file(c_text, f"sptxt_{i}.txt")
+            # 파일에서 텍스트 읽기
+            chunk_filename = f"sptxt_{i}.txt"
+            try:
+                with open(chunk_filename, 'r', encoding='utf-8') as f:
+                    chunk_text = f.read()
+            except FileNotFoundError:
+                print(f"⚠️  파일을 찾을 수 없습니다: {chunk_filename}")
+                continue
             
-            # 파일명 생성 (2자리 0채움)
+            # MP3 파일명 생성
             mp3_file_name = f"{mp3_path}_{i:02d}.mp3"
             
-            # 음성 변환 (모델 재사용)
-            text_to_mp3_optimized(model, speaker_ids, c_text, mp3_file_name, speed, lang)
+            # 음성 변환
+            print(f"  - 음성 변환 중...")
+            text_to_mp3_optimized(model, speaker_ids, chunk_text, mp3_file_name, speed, lang)
             
-            print(f"✓ MP3 파일 생성 완료: {mp3_file_name}")
+            # 처리 완료
+            print(f"  ✓ 완료: {mp3_file_name}")
+            
+            # 청크 텍스트 메모리 해제
+            del chunk_text
             
             # 각 청크 처리 후 메모리 정리
             force_memory_cleanup()
             
+        print("\n" + "=" * 60)
+        print("✓ 모든 MP3 파일 생성 완료!")
+            
     except Exception as e:
-        print(f"❌ 오류 발생: {e}")
+        print(f"\n❌ 오류 발생: {e}")
         import traceback
         traceback.print_exc()
     finally:
         # 모든 작업 완료 후 모델 해제
         release_tts_model()
-        print("\n모든 작업이 완료되었습니다.")
+        print("\n[최종] 모든 작업이 완료되었습니다.")
 
 def text_to_mp3_optimized(model, speaker_ids, text, mp3_path, speed=1.25, lang='KR'):
     """
