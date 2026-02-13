@@ -121,11 +121,21 @@ class TTS(nn.Module):
                         length_scale=1. / speed,
                     )[0][0, 0].data.cpu().float().numpy()
                 del x_tst, tones, lang_ids, bert, ja_bert, x_tst_lengths, speakers
-                # 
+                # 메모리 정리 강화
+                if torch.cuda.is_available():
+                    torch.cuda.empty_cache()
             audio_list.append(audio)
-        torch.cuda.empty_cache()
+            del audio  # 명시적 삭제
+        
+        # 최종 메모리 정리
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
+        
         audio = self.audio_numpy_concat(audio_list, sr=self.hps.data.sampling_rate, speed=speed)
-
+        
+        # audio_list 메모리 해제
+        del audio_list
+        
         if output_path is None:
             return audio
         else:
@@ -133,3 +143,5 @@ class TTS(nn.Module):
                 soundfile.write(output_path, audio, self.hps.data.sampling_rate, format=format)
             else:
                 soundfile.write(output_path, audio, self.hps.data.sampling_rate)
+            # 파일 저장 후 메모리 해제
+            del audio
