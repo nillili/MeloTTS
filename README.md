@@ -1,62 +1,212 @@
-<div align="center">
-  <div>&nbsp;</div>
-  <img src="logo.png" width="300"/> <br>
-  <a href="https://trendshift.io/repositories/8133" target="_blank"><img src="https://trendshift.io/api/badge/repositories/8133" alt="myshell-ai%2FMeloTTS | Trendshift" style="width: 250px; height: 55px;" width="250" height="55"/></a>
-</div>
+# PDF2MP3 v2.4 - 배치 변환 지원
 
-## Introduction
-MeloTTS is a **high-quality multi-lingual** text-to-speech library by [MIT](https://www.mit.edu/) and [MyShell.ai](https://myshell.ai). Supported languages include:
+PDF 파일의 텍스트(한글)를 추출하여 음성(MP3)으로 변환하는 프로그램입니다.
 
-| Language | Example |
-| --- | --- |
-| English (American)    | [Link](https://myshell-public-repo-host.s3.amazonaws.com/myshellttsbase/examples/en/EN-US/speed_1.0/sent_000.wav) |
-| English (British)     | [Link](https://myshell-public-repo-host.s3.amazonaws.com/myshellttsbase/examples/en/EN-BR/speed_1.0/sent_000.wav) |
-| English (Indian)      | [Link](https://myshell-public-repo-host.s3.amazonaws.com/myshellttsbase/examples/en/EN_INDIA/speed_1.0/sent_000.wav) |
-| English (Australian)  | [Link](https://myshell-public-repo-host.s3.amazonaws.com/myshellttsbase/examples/en/EN-AU/speed_1.0/sent_000.wav) |
-| English (Default)     | [Link](https://myshell-public-repo-host.s3.amazonaws.com/myshellttsbase/examples/en/EN-Default/speed_1.0/sent_000.wav) |
-| Spanish               | [Link](https://myshell-public-repo-host.s3.amazonaws.com/myshellttsbase/examples/es/ES/speed_1.0/sent_000.wav) |
-| French                | [Link](https://myshell-public-repo-host.s3.amazonaws.com/myshellttsbase/examples/fr/FR/speed_1.0/sent_000.wav) |
-| Chinese (mix EN)      | [Link](https://myshell-public-repo-host.s3.amazonaws.com/myshellttsbase/examples/zh/ZH/speed_1.0/sent_008.wav) |
-| Japanese              | [Link](https://myshell-public-repo-host.s3.amazonaws.com/myshellttsbase/examples/jp/JP/speed_1.0/sent_000.wav) |
-| Korean                | [Link](https://myshell-public-repo-host.s3.amazonaws.com/myshellttsbase/examples/kr/KR/speed_1.0/sent_000.wav) |
+## 🆕 v2.4 주요 기능
 
-Some other features include:
-- The Chinese speaker supports `mixed Chinese and English`.
-- Fast enough for `CPU real-time inference`.
+### ✨ 배치 변환 모드
+- **폴더 단위 자동 변환**: 폴더 내 모든 PDF를 한 번에 처리
+- **스마트 재시작**: 변환 완료된 파일은 자동으로 스킵
+- **같은 폴더에 저장**: MP3 파일은 원본 PDF와 같은 위치에 저장
+- **견고한 오류 처리**: 특정 파일 실패 시에도 다음 파일 계속 진행
 
-## Usage
-- [Use without Installation](docs/quick_use.md)
-- [Install and Use Locally](docs/install.md)
-- [Training on Custom Dataset](docs/training.md)
+### 📝 상세 로깅 (v2.3)
+- **시스템 다운 후 분석**: `pdf2mp3.log` 파일로 상세 추적
+- **20개 이상의 메모리 체크포인트**: 각 단계별 메모리 상태 기록
+- **실시간 모니터링**: `tail -f pdf2mp3.log`로 진행 상황 확인
 
-The Python API and model cards can be found in [this repo](https://github.com/myshell-ai/MeloTTS/blob/main/docs/install.md#python-api) or on [HuggingFace](https://huggingface.co/myshell-ai).
+### 💾 메모리 최적화 (v2.0~v2.2)
+- **파일 기반 청크 처리**: 메모리 사용량 58% 감소 (1.2GB → 500MB)
+- **TTS 모델 싱글톤**: 한 번만 로드하여 재사용
+- **명시적 메모리 해제**: 각 청크 처리 후 자동 정리
 
-**Contributing**
+## 🚀 빠른 시작
 
-If you find this work useful, please consider contributing to this repo.
-
-- Many thanks to [@fakerybakery](https://github.com/fakerybakery) for adding the Web UI and CLI part.
-
-## Authors
-
-- [Wenliang Zhao](https://wl-zhao.github.io) at Tsinghua University
-- [Xumin Yu](https://yuxumin.github.io) at Tsinghua University
-- [Zengyi Qin](https://www.qinzy.tech) (project lead) at MIT and MyShell
-
-**Citation**
-```
-@software{zhao2024melo,
-  author={Zhao, Wenliang and Yu, Xumin and Qin, Zengyi},
-  title = {MeloTTS: High-quality Multi-lingual Multi-accent Text-to-Speech},
-  url = {https://github.com/myshell-ai/MeloTTS},
-  year = {2023}
-}
+### 설치
+```bash
+git clone https://github.com/nillili/MeloTTS.git
+cd MeloTTS
+conda activate melo  # 또는 환경 생성
+pip install -r requirements.txt
 ```
 
-## License
+### 사용법
 
-This library is under MIT License, which means it is free for both commercial and non-commercial use.
+#### 📁 배치 변환 (폴더 전체)
+```bash
+./run_pdf2mp3.sh ./pdf
+```
 
-## Acknowledgements
+#### 📄 단일 파일 변환
+```bash
+./run_pdf2mp3.sh document.pdf
+```
 
-This implementation is based on [TTS](https://github.com/coqui-ai/TTS), [VITS](https://github.com/jaywalnut310/vits), [VITS2](https://github.com/daniilrobnikov/vits2) and [Bert-VITS2](https://github.com/fishaudio/Bert-VITS2). We appreciate their awesome work.
+#### 🔄 중단 후 재시작
+```bash
+# 특정 청크부터 시작
+./run_pdf2mp3.sh document.pdf 10
+```
+
+## 📖 상세 가이드
+
+### 기본 사용
+- **[QUICK_START.md](QUICK_START.md)**: 빠른 시작 가이드
+- **[HOW_TO_USE.md](HOW_TO_USE.md)**: 전체 사용 방법
+
+### 배치 변환
+- **[BATCH_CONVERT_GUIDE.md](BATCH_CONVERT_GUIDE.md)**: 폴더 단위 일괄 변환 가이드
+
+### 문제 해결
+- **[SYSTEM_DOWN_FIX.md](SYSTEM_DOWN_FIX.md)**: 시스템 다운 문제 해결
+- **[LOGGING_GUIDE.md](LOGGING_GUIDE.md)**: 로그 분석 방법
+- **[URGENT_FIX.md](URGENT_FIX.md)**: 긴급 수정 사항
+- **[FINAL_FIX.md](FINAL_FIX.md)**: torchaudio 오류 해결
+
+### 메모리 최적화
+- **[MEMORY_OPTIMIZATION.md](MEMORY_OPTIMIZATION.md)**: 메모리 최적화 상세 가이드
+
+## 💡 사용 예시
+
+### 예시 1: 단일 PDF 변환
+```bash
+conda activate melo
+./run_pdf2mp3.sh 열세번째1.pdf
+
+# 생성 파일:
+# - 열세번째1_00.mp3
+# - 열세번째1_01.mp3
+# - ...
+```
+
+### 예시 2: 폴더 내 모든 PDF 변환
+```bash
+# PDF 파일들이 있는 폴더
+ls pdf/
+# → 열세번째1.pdf, 열세번째2.pdf, 학습자료.pdf
+
+./run_pdf2mp3.sh ./pdf
+
+# 결과:
+# pdf/열세번째1_00.mp3, 열세번째1_01.mp3, ...
+# pdf/열세번째2_00.mp3, 열세번째2_01.mp3, ...
+# pdf/학습자료_00.mp3, 학습자료_01.mp3, ...
+```
+
+### 예시 3: 중단 후 재시작
+```bash
+# 처음 실행 (28번 청크에서 시스템 다운)
+./run_pdf2mp3.sh 열세번째1.pdf
+
+# 로그 확인
+tail -n 100 pdf2mp3.log | grep "청크.*완료"
+# → 마지막: "청크 27 완료"
+
+# 28번부터 재시작
+./run_pdf2mp3.sh 열세번째1.pdf 28
+```
+
+### 예시 4: 배치 재시작 (스마트 스킵)
+```bash
+# 첫 실행 (열세번째1.pdf 완료 후 시스템 다운)
+./run_pdf2mp3.sh ./pdf
+
+# 재시작 (같은 명령)
+./run_pdf2mp3.sh ./pdf
+# → 열세번째1.pdf 자동 스킵
+# → 열세번째2.pdf부터 계속
+```
+
+## 🔧 고급 기능
+
+### 실시간 로그 모니터링
+```bash
+# 터미널 1
+./run_pdf2mp3.sh ./pdf
+
+# 터미널 2
+tail -f pdf2mp3.log | grep MEMORY
+```
+
+### 백그라운드 실행
+```bash
+nohup ./run_pdf2mp3.sh ./pdf > batch.log 2>&1 &
+tail -f batch.log
+```
+
+### GPU 사용
+```bash
+# 배치
+./run_pdf2mp3.sh ./pdf cuda
+
+# 단일 파일
+./run_pdf2mp3.sh document.pdf 0 cuda
+```
+
+## 📊 버전 히스토리
+
+| 버전 | 날짜 | 주요 개선사항 | 메모리 사용량 |
+|------|------|---------------|---------------|
+| v2.4 | 2026-02-14 | 배치 변환 기능, 스마트 재시작 | ~500MB |
+| v2.3 | 2026-02-13 | 상세 로깅, 20개 체크포인트 | ~500MB |
+| v2.2 | 2026-02-13 | 파일 기반 청크 처리 | ~500MB |
+| v2.1 | 2026-02-13 | 첫 청크 메모리 최적화 | ~700MB |
+| v2.0 | 2026-02-13 | 싱글톤 TTS 모델 | ~900MB |
+| v1.0 | - | 초기 버전 | >1.2GB |
+
+## 🛠️ 시스템 요구사항
+
+- **Python**: 3.9+
+- **메모리**: 최소 1GB (권장 2GB+)
+- **디스크**: PDF 크기의 10배 이상 권장
+- **OS**: Linux, macOS (Windows WSL)
+
+## 📦 주요 의존성
+
+- PyMuPDF (fitz): PDF 텍스트 추출
+- MeloTTS: 한국어 음성 합성
+- torch: 딥러닝 프레임워크
+- psutil: 메모리 모니터링
+
+## ⚠️ 문제 해결
+
+### "죽었음(Killed)" 오류
+1. Swap 메모리 추가 (512MB)
+2. 청크 크기 축소 (`max_length=2000 → 1500`)
+3. 로그 확인: `grep "MEMORY" pdf2mp3.log`
+
+자세한 내용: [SYSTEM_DOWN_FIX.md](SYSTEM_DOWN_FIX.md)
+
+### torchaudio 오류
+`AttributeError: 'NoneType' object has no attribute 'format'`
+
+해결: [FINAL_FIX.md](FINAL_FIX.md) 참조 (v2.2.3에서 해결됨)
+
+### 메모리 부족
+- Swap 추가
+- 청크 크기 축소
+- 다른 프로세스 종료
+
+자세한 내용: [URGENT_FIX.md](URGENT_FIX.md)
+
+## 🤝 기여
+
+이슈 및 Pull Request 환영합니다!
+
+## 📄 라이선스
+
+이 프로젝트는 MeloTTS 프로젝트를 기반으로 합니다.
+
+## 🔗 링크
+
+- **GitHub**: https://github.com/nillili/MeloTTS
+- **원본 MeloTTS**: https://github.com/myshell-ai/MeloTTS
+
+## 📧 문의
+
+이슈 탭에서 문의해주세요.
+
+---
+
+**최신 버전**: v2.4 (2026-02-14)  
+**최신 커밋**: `0fb8171`
