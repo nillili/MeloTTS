@@ -487,6 +487,167 @@ def switch_txt(text):
     return clean_text
 
 
+def is_pdf_converted(pdf_path):
+    """
+    PDF 파일이 이미 MP3로 변환되었는지 확인
+    청크 0번 파일(sptxt_0.txt 또는 *_00.mp3)이 존재하면 변환된 것으로 간주
+    
+    Args:
+        pdf_path (str): PDF 파일 경로
+        
+    Returns:
+        bool: 변환 완료 여부
+    """
+    pdf_dir = os.path.dirname(pdf_path) or '.'
+    base_name = os.path.splitext(os.path.basename(pdf_path))[0]
+    
+    # 체크할 파일들
+    check_files = [
+        os.path.join(pdf_dir, f"{base_name}_00.mp3"),  # 첫 번째 MP3 파일
+        os.path.join(pdf_dir, "sptxt_0.txt")  # 첫 번째 텍스트 청크
+    ]
+    
+    # 하나라도 존재하면 변환된 것으로 간주
+    for check_file in check_files:
+        if os.path.exists(check_file):
+            logger.info(f"이미 변환됨: {pdf_path} (확인 파일: {check_file})")
+            return True
+    
+    return False
+
+
+def find_pdf_files(directory):
+    """
+    디렉토리에서 변환되지 않은 PDF 파일 목록 반환
+    
+    Args:
+        directory (str): 검색할 디렉토리 경로
+        
+    Returns:
+        list: 변환되지 않은 PDF 파일 경로 리스트
+    """
+    if not os.path.isdir(directory):
+        logger.error(f"디렉토리가 아닙니다: {directory}")
+        return []
+    
+    pdf_files = []
+    
+    # 디렉토리 내 모든 PDF 파일 찾기
+    for filename in os.listdir(directory):
+        if filename.lower().endswith('.pdf'):
+            pdf_path = os.path.join(directory, filename)
+            
+            # 이미 변환된 파일인지 확인
+            if not is_pdf_converted(pdf_path):
+                pdf_files.append(pdf_path)
+                logger.info(f"변환 대기: {pdf_path}")
+            else:
+                logger.info(f"변환 완료(스킵): {pdf_path}")
+    
+    return sorted(pdf_files)  # 파일명 정렬
+
+
+def batch_convert_pdfs(directory, lang='KR', device='cpu'):
+    """
+    디렉토리 내의 모든 미변환 PDF를 MP3로 배치 변환
+    
+    Args:
+        directory (str): PDF 파일들이 있는 디렉토리
+        lang (str): 언어 코드 (기본값: 'KR')
+        device (str): 디바이스 (기본값: 'cpu')
+    """
+    logger.info("="*60)
+    logger.info(f"배치 변환 시작: {directory}")
+    logger.info("="*60)
+    
+    print("\n" + "="*60)
+    print(f"📁 배치 변환 모드")
+    print("="*60)
+    print(f"대상 디렉토리: {directory}")
+    print(f"언어: {lang}, 디바이스: {device}")
+    print("="*60 + "\n")
+    
+    # 변환할 PDF 파일 목록 수집
+    pdf_files = find_pdf_files(directory)
+    
+    if not pdf_files:
+        print("⚠️  변환할 PDF 파일이 없습니다.")
+        print("   - 이미 모든 파일이 변환되었거나")
+        print("   - 디렉토리에 PDF 파일이 없습니다.")
+        logger.info("변환할 PDF 없음")
+        return
+    
+    total_files = len(pdf_files)
+    print(f"✓ 변환 대상: {total_files}개 파일\n")
+    logger.info(f"총 {total_files}개 PDF 파일 변환 예정")
+    
+    # 각 PDF 파일 변환
+    success_count = 0
+    failed_files = []
+    
+    for idx, pdf_path in enumerate(pdf_files, 1):
+        filename = os.path.basename(pdf_path)
+        base_name = os.path.splitext(filename)[0]
+        pdf_dir = os.path.dirname(pdf_path)
+        
+        print("\n" + "="*60)
+        print(f"📄 [{idx}/{total_files}] {filename}")
+        print("="*60)
+        logger.info(f"[{idx}/{total_files}] 변환 시작: {pdf_path}")
+        
+        try:
+            # 출력 경로는 PDF와 같은 디렉토리에 저장
+            # 현재 작업 디렉토리를 PDF 디렉토리로 변경
+            original_dir = os.getcwd()
+            os.chdir(pdf_dir)
+            
+            logger.info(f"작업 디렉토리 변경: {pdf_dir}")
+            
+            # MP3 변환 (상대 경로 사용)
+            pdf_to_mp3(filename, base_name, start_num=0, lang=lang, device=device)
+            
+            # 원래 디렉토리로 복귀
+            os.chdir(original_dir)
+            
+            success_count += 1
+            print(f"\n✅ [{idx}/{total_files}] 완료: {filename}")
+            logger.info(f"[{idx}/{total_files}] 변환 완료: {pdf_path}")
+            
+        except Exception as e:
+            # 원래 디렉토리로 복귀
+            os.chdir(original_dir)
+            
+            failed_files.append((filename, str(e)))
+            print(f"\n❌ [{idx}/{total_files}] 실패: {filename}")
+            print(f"   오류: {e}")
+            logger.error(f"[{idx}/{total_files}] 변환 실패: {pdf_path}")
+            logger.error(f"오류 내용: {e}")
+            logger.error(traceback.format_exc())
+            
+            # 실패해도 다음 파일 계속 처리
+            continue
+    
+    # 최종 결과 출력
+    print("\n" + "="*60)
+    print("📊 배치 변환 완료")
+    print("="*60)
+    print(f"✓ 성공: {success_count}/{total_files}")
+    if failed_files:
+        print(f"✗ 실패: {len(failed_files)}/{total_files}")
+        print("\n실패한 파일:")
+        for filename, error in failed_files:
+            print(f"  - {filename}: {error}")
+    print("="*60)
+    
+    logger.info("="*60)
+    logger.info(f"배치 변환 완료: 성공 {success_count}/{total_files}")
+    if failed_files:
+        logger.warning(f"실패: {len(failed_files)}개")
+        for filename, error in failed_files:
+            logger.warning(f"  - {filename}: {error}")
+    logger.info("="*60)
+
+
 # 사용 예시
 # pdf_path = '2025061401.pdf'  # PDF 파일 경로
 # mp3_path = 'output_01.mp3'   # 생성될 MP3 파일 경로
@@ -495,27 +656,59 @@ def switch_txt(text):
 
 if len(sys.argv) > 1:
     filepath = sys.argv[1]
-    if len(sys.argv) > 2:
-        start_num = int(sys.argv[2])
-    else: 
-        start_num = 0
     
-    # 디바이스 설정 (선택적 파라미터)
-    device = 'cpu'
-    if len(sys.argv) > 3:
-        device = sys.argv[3]  # 예: 'cuda' 또는 'cuda:0'
+    # 디렉토리인지 파일인지 확인
+    if os.path.isdir(filepath):
+        # 디렉토리 배치 처리 모드
+        device = 'cpu'
+        if len(sys.argv) > 2:
+            device = sys.argv[2]  # 예: 'cuda' 또는 'cuda:0'
+        
+        batch_convert_pdfs(filepath, lang='KR', device=device)
+        
+    else:
+        # 단일 파일 처리 모드
+        if len(sys.argv) > 2:
+            start_num = int(sys.argv[2])
+        else: 
+            start_num = 0
+        
+        # 디바이스 설정 (선택적 파라미터)
+        device = 'cpu'
+        if len(sys.argv) > 3:
+            device = sys.argv[3]  # 예: 'cuda' 또는 'cuda:0'
 
-    filename = os.path.basename(filepath)
-    name, _ = os.path.splitext(filename) 
+        filename = os.path.basename(filepath)
+        name, _ = os.path.splitext(filename) 
+        
+        # 파일이 위치한 디렉토리로 이동
+        file_dir = os.path.dirname(filepath) or '.'
+        original_dir = os.getcwd()
+        os.chdir(file_dir)
 
-    print(f"=" * 60)
-    print(f"PDF to MP3 변환 시작")
-    print(f"=" * 60)
-    print(f"입력 파일: {filepath}")
-    print(f"출력 이름: {name}")
-    print(f"시작 번호: {start_num}")
-    print(f"디바이스: {device}")
-    print(f"=" * 60)
-    
-    pdf_to_mp3(filepath, name, start_num, lang='KR', device=device)
+        print(f"=" * 60)
+        print(f"PDF to MP3 변환 시작")
+        print(f"=" * 60)
+        print(f"입력 파일: {filepath}")
+        print(f"출력 이름: {name}")
+        print(f"시작 번호: {start_num}")
+        print(f"디바이스: {device}")
+        print(f"=" * 60)
+        
+        pdf_to_mp3(filename, name, start_num, lang='KR', device=device)
+        
+        # 원래 디렉토리로 복귀
+        os.chdir(original_dir)
+else:
+    print("사용법:")
+    print("  단일 파일: python pdf2mp3.py <pdf파일> [시작번호] [디바이스]")
+    print("  배치 처리: python pdf2mp3.py <디렉토리> [디바이스]")
+    print()
+    print("예시:")
+    print("  python pdf2mp3.py document.pdf")
+    print("  python pdf2mp3.py document.pdf 5")
+    print("  python pdf2mp3.py document.pdf 0 cuda")
+    print("  python pdf2mp3.py ./pdf")
+    print("  python pdf2mp3.py ./pdf cpu")
+
 
