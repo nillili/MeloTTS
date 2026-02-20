@@ -41,7 +41,8 @@ pip install -r requirements.txt
 
 #### 🎯 반복 문장 제거 (NEW!)
 ```bash
-# 1. ignores.txt 파일 생성
+# 1. pdf2mp3.py와 같은 디렉터리에 ignores.txt 파일 생성 (중요!)
+cd ~/work/MeloTTS  # pdf2mp3.py가 있는 위치
 nano ignores.txt
 
 # 2. 제거할 문장 입력 (한 줄에 하나씩)
@@ -49,8 +50,11 @@ nano ignores.txt
 문학사
 저작권
 
-# 3. 일반적인 방법으로 변환
+# 3. 일반적인 방법으로 변환 (어느 폴더에서든 실행 가능)
 ./run_pdf2mp3.sh document.pdf
+
+# ⚠️ 주의: ignores.txt는 pdf2mp3.py와 같은 위치에 두어야 합니다!
+#          작업 폴더에 두면 rm * 명령 시 함께 삭제됩니다.
 ```
 
 #### 📁 배치 변환 (폴더 전체)

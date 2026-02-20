@@ -528,20 +528,25 @@ def split_text(text, max_length=2000, split_pattern=r'니다\.|습니다\.|었�
 def load_ignore_patterns(ignore_file='ignores.txt'):
     """
     ignores.txt 파일에서 제거할 문장 패턴 로드
+    파일은 항상 pdf2mp3.py와 같은 디렉터리에서 검색
     
     Args:
-        ignore_file (str): 무시할 패턴이 저장된 파일 경로
+        ignore_file (str): 무시할 패턴이 저장된 파일명 (기본값: 'ignores.txt')
         
     Returns:
         list: 제거할 문장 리스트 (빈 리스트면 파일 없음)
     """
-    if not os.path.exists(ignore_file):
-        logger.debug(f"ignores.txt 파일 없음: {ignore_file}")
+    # 스크립트 디렉터리 경로 가져오기
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    ignore_path = os.path.join(script_dir, ignore_file)
+    
+    if not os.path.exists(ignore_path):
+        logger.debug(f"ignores.txt 파일 없음: {ignore_path}")
         return []
     
     patterns = []
     try:
-        with open(ignore_file, 'r', encoding='utf-8') as f:
+        with open(ignore_path, 'r', encoding='utf-8') as f:
             for line in f:
                 line = line.strip()
                 # 빈 줄이나 주석은 무시
@@ -549,14 +554,15 @@ def load_ignore_patterns(ignore_file='ignores.txt'):
                     patterns.append(line)
         
         if patterns:
-            logger.info(f"ignores.txt 로드 완료: {len(patterns)}개 패턴")
+            logger.info(f"ignores.txt 로드 완료: {ignore_path}")
+            logger.info(f"총 {len(patterns)}개 패턴")
             for i, pattern in enumerate(patterns, 1):
                 logger.debug(f"  패턴 {i}: '{pattern}'")
         else:
-            logger.info("ignores.txt 파일이 비어있음")
+            logger.info(f"ignores.txt 파일이 비어있음: {ignore_path}")
             
     except Exception as e:
-        logger.error(f"ignores.txt 읽기 오류: {e}")
+        logger.error(f"ignores.txt 읽기 오류 ({ignore_path}): {e}")
         return []
     
     return patterns

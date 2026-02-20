@@ -26,12 +26,16 @@ PDF 내용:
 
 ### 1단계: ignores.txt 파일 생성
 
-프로그램 실행 디렉토리에 `ignores.txt` 파일을 만듭니다.
+**중요**: `ignores.txt` 파일은 **pdf2mp3.py와 같은 디렉터리**에 생성해야 합니다.
 
 ```bash
-cd ~/work/MeloTTS
-nano ignores.txt  # 또는 vi, vim 등 편집기 사용
+cd ~/work/MeloTTS  # pdf2mp3.py가 있는 디렉터리
+nano ignores.txt   # 또는 vi, vim 등 편집기 사용
 ```
+
+**위치가 중요한 이유:**
+- ✅ pdf2mp3.py와 같은 위치: 작업 폴더의 `rm *` 명령으로부터 안전
+- ❌ 작업 폴더(PDF/MP3가 생성되는 곳): `rm *` 시 함께 삭제됨
 
 ### 2단계: 제거할 문장 입력
 
@@ -87,6 +91,45 @@ Chapter
 
 📊 텍스트 청크 분할 중...
 ✓ 총 41개의 청크로 분할되었습니다.
+```
+
+---
+
+## 📁 파일 위치 (중요!)
+
+### ✅ 올바른 위치
+```
+~/work/MeloTTS/
+├── pdf2mp3.py          ← 메인 스크립트
+├── ignores.txt         ← 여기에 생성! (pdf2mp3.py와 같은 위치)
+├── melo/
+└── run_pdf2mp3.sh
+```
+
+### ❌ 잘못된 위치
+```
+~/work/pdfs/            ← 작업 폴더 (PDF/MP3가 생성되는 곳)
+├── document.pdf
+├── document_00.mp3
+├── document_01.mp3
+├── ignores.txt         ← 여기 두면 rm * 실행 시 삭제됨!
+└── sptxt_0.txt
+```
+
+### 🔒 안전성
+- **스크립트 디렉터리**: ignores.txt는 **항상 pdf2mp3.py가 있는 곳**에서 검색
+- **작업 폴더 독립**: 어느 폴더에서 실행하든 같은 ignores.txt 사용
+- **삭제 방지**: 작업 폴더에서 `rm *.txt` 또는 `rm *` 실행해도 안전
+
+### 📍 경로 확인 방법
+```bash
+# pdf2mp3.py 위치 확인
+which python  # Python 경로 확인 후
+find ~/work -name "pdf2mp3.py"  # pdf2mp3.py 위치 찾기
+
+# ignores.txt는 pdf2mp3.py와 같은 디렉터리에 생성
+cd ~/work/MeloTTS  # pdf2mp3.py가 있는 곳
+ls -la ignores.txt  # 확인
 ```
 
 ---
