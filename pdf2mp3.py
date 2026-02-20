@@ -196,8 +196,20 @@ def pdf_to_mp3(pdf_path, mp3_path, start_num=0, lang='KR', device='cpu'):
     print("[2단계] 텍스트 전처리 및 분할 중...")
     logger.info("[2단계] 텍스트 전처리 시작")
     log_memory_status("BEFORE_TEXT_PROCESS")
+    
+    # 특수문자 정리
     text = switch_txt(text)
     logger.info("텍스트 정리 완료")
+    
+    # ignores.txt에서 반복 문장 제거
+    ignore_patterns = load_ignore_patterns('ignores.txt')
+    if ignore_patterns:
+        print(f"  → ignores.txt 적용: {len(ignore_patterns)}개 패턴")
+        text, removed_count = remove_ignore_patterns(text, ignore_patterns)
+        if removed_count > 0:
+            print(f"  → {removed_count}개 반복 문장 제거됨")
+    
+    # 청크 분할
     sp_txt = split_text(text)
     log_memory_status("AFTER_TEXT_SPLIT")
     
@@ -481,6 +493,84 @@ def split_text(text, max_length=2000, split_pattern=r'니다\.|습니다\.|었�
             final_chunks.append(chunk.strip())
 
     return final_chunks
+
+def load_ignore_patterns(ignore_file='ignores.txt'):
+    """
+    ignores.txt 파일에서 제거할 문장 패턴 로드
+    
+    Args:
+        ignore_file (str): 무시할 패턴이 저장된 파일 경로
+        
+    Returns:
+        list: 제거할 문장 리스트 (빈 리스트면 파일 없음)
+    """
+    if not os.path.exists(ignore_file):
+        logger.debug(f"ignores.txt 파일 없음: {ignore_file}")
+        return []
+    
+    patterns = []
+    try:
+        with open(ignore_file, 'r', encoding='utf-8') as f:
+            for line in f:
+                line = line.strip()
+                # 빈 줄이나 주석은 무시
+                if line and not line.startswith('#'):
+                    patterns.append(line)
+        
+        if patterns:
+            logger.info(f"ignores.txt 로드 완료: {len(patterns)}개 패턴")
+            for i, pattern in enumerate(patterns, 1):
+                logger.debug(f"  패턴 {i}: '{pattern}'")
+        else:
+            logger.info("ignores.txt 파일이 비어있음")
+            
+    except Exception as e:
+        logger.error(f"ignores.txt 읽기 오류: {e}")
+        return []
+    
+    return patterns
+
+
+def remove_ignore_patterns(text, patterns):
+    """
+    텍스트에서 지정된 패턴 제거
+    
+    Args:
+        text (str): 원본 텍스트
+        patterns (list): 제거할 문장 리스트
+        
+    Returns:
+        tuple: (정리된 텍스트, 제거된 패턴 수)
+    """
+    if not patterns:
+        return text, 0
+    
+    original_text = text
+    removed_count = 0
+    
+    for pattern in patterns:
+        # 패턴을 정규식으로 이스케이프 (특수문자 처리)
+        escaped_pattern = re.escape(pattern)
+        
+        # 대소문자 구분 없이, 전후 공백 무시하고 매칭
+        # \s*는 공백 0개 이상을 의미
+        regex_pattern = r'\s*' + escaped_pattern + r'\s*'
+        
+        # 매칭된 횟수 카운트
+        matches = re.findall(regex_pattern, text, re.IGNORECASE)
+        if matches:
+            removed_count += len(matches)
+            logger.debug(f"패턴 '{pattern}' 제거: {len(matches)}회")
+        
+        # 패턴 제거
+        text = re.sub(regex_pattern, '', text, flags=re.IGNORECASE)
+    
+    if removed_count > 0:
+        logger.info(f"총 {removed_count}개 반복 문장 제거됨")
+        logger.debug(f"텍스트 길이: {len(original_text)} → {len(text)} ({len(original_text) - len(text)} 문자 감소)")
+    
+    return text, removed_count
+
 
 def switch_txt(text):
     clean_text = re.sub(r'[<>《》=ㅅ;&ㅁㅇㄴ|+#$@}ㅆ{ㄱㄹㅂㅊㄷㅈ]', '', text)
