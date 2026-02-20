@@ -193,7 +193,9 @@ def pdf_to_mp3(pdf_path, mp3_path, start_num=0, lang='KR', device='cpu'):
     logger.info(f"추출된 텍스트 길이: {len(text)} 문자")
     
     # 텍스트 전처리 및 분할
-    print("[2단계] 텍스트 전처리 및 분할 중...")
+    print("\n" + "="*60)
+    print("[2단계] 텍스트 전처리 및 분할")
+    print("="*60)
     logger.info("[2단계] 텍스트 전처리 시작")
     log_memory_status("BEFORE_TEXT_PROCESS")
     
@@ -204,18 +206,47 @@ def pdf_to_mp3(pdf_path, mp3_path, start_num=0, lang='KR', device='cpu'):
     # ignores.txt에서 반복 문장 제거
     ignore_patterns = load_ignore_patterns('ignores.txt')
     if ignore_patterns:
-        print(f"  → ignores.txt 적용: {len(ignore_patterns)}개 패턴")
-        text, removed_count = remove_ignore_patterns(text, ignore_patterns)
-        if removed_count > 0:
-            print(f"  → {removed_count}개 반복 문장 제거됨")
+        print(f"\n📝 제외 패턴 목록 (ignores.txt):")
+        print("-" * 60)
+        for i, pattern in enumerate(ignore_patterns, 1):
+            # 패턴이 너무 길면 줄임
+            display_pattern = pattern if len(pattern) <= 50 else pattern[:47] + "..."
+            print(f"  {i}. '{display_pattern}'")
+        print("-" * 60)
+        print(f"총 {len(ignore_patterns)}개 패턴 적용\n")
+        
+        logger.info(f"ignores.txt 적용: {len(ignore_patterns)}개 패턴")
+        
+        # 패턴 제거 실행
+        text, removal_stats = remove_ignore_patterns(text, ignore_patterns)
+        
+        # 제거 결과 출력
+        if removal_stats:
+            print("🗑️  제거된 반복 문장:")
+            print("-" * 60)
+            total_removed = 0
+            for pattern, count in removal_stats.items():
+                display_pattern = pattern if len(pattern) <= 40 else pattern[:37] + "..."
+                print(f"  • '{display_pattern}': {count}회 제거")
+                total_removed += count
+            print("-" * 60)
+            print(f"✓ 총 {total_removed}개 반복 문장 제거됨\n")
+            logger.info(f"총 {total_removed}개 반복 문장 제거됨")
+        else:
+            print("ℹ️  제거된 문장 없음 (패턴이 텍스트에 없음)\n")
+            logger.info("패턴과 일치하는 문장 없음")
+    else:
+        print("ℹ️  ignores.txt 파일 없음 - 모든 텍스트 유지\n")
+        logger.info("ignores.txt 파일 없음")
     
     # 청크 분할
+    print("📊 텍스트 청크 분할 중...")
     sp_txt = split_text(text)
     log_memory_status("AFTER_TEXT_SPLIT")
     
     total_chunks = len(sp_txt)
     logger.info(f"총 {total_chunks}개의 청크로 분할")
-    print(f"✓ 총 {total_chunks}개의 청크로 분할되었습니다.")
+    print(f"✓ 총 {total_chunks}개의 청크로 분할되었습니다.\n")
     
     # 단계 2: 모든 청크를 파일로 저장 (메모리 해제를 위해)
     print(f"\n[3단계] 모든 청크를 파일로 저장 중...")
@@ -540,13 +571,14 @@ def remove_ignore_patterns(text, patterns):
         patterns (list): 제거할 문장 리스트
         
     Returns:
-        tuple: (정리된 텍스트, 제거된 패턴 수)
+        tuple: (정리된 텍스트, 제거 통계 딕셔너리)
     """
     if not patterns:
-        return text, 0
+        return text, {}
     
     original_text = text
-    removed_count = 0
+    removal_stats = {}  # 패턴별 제거 횟수
+    total_removed = 0
     
     for pattern in patterns:
         # 패턴을 정규식으로 이스케이프 (특수문자 처리)
@@ -558,18 +590,21 @@ def remove_ignore_patterns(text, patterns):
         
         # 매칭된 횟수 카운트
         matches = re.findall(regex_pattern, text, re.IGNORECASE)
-        if matches:
-            removed_count += len(matches)
-            logger.debug(f"패턴 '{pattern}' 제거: {len(matches)}회")
+        match_count = len(matches)
+        
+        if match_count > 0:
+            removal_stats[pattern] = match_count
+            total_removed += match_count
+            logger.debug(f"패턴 '{pattern}' 제거: {match_count}회")
         
         # 패턴 제거
         text = re.sub(regex_pattern, '', text, flags=re.IGNORECASE)
     
-    if removed_count > 0:
-        logger.info(f"총 {removed_count}개 반복 문장 제거됨")
+    if total_removed > 0:
+        logger.info(f"총 {total_removed}개 반복 문장 제거됨")
         logger.debug(f"텍스트 길이: {len(original_text)} → {len(text)} ({len(original_text) - len(text)} 문자 감소)")
     
-    return text, removed_count
+    return text, removal_stats
 
 
 def switch_txt(text):
